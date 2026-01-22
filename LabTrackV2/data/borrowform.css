@@ -1,0 +1,6 @@
+body { font-family: sans-serif; background: #222; color: #fff; padding: 20px; text-align: center; }
+.container { max-width: 500px; margin: 0 auto; background: #333; padding: 20px; border-radius: 8px; }
+input, button, textarea { width: 100%; padding: 12px; margin-top: 10px; border-radius: 5px; border:none; box-sizing: border-box; }
+button { background: #2196F3; color: white; font-weight: bold; cursor: pointer; }
+.status-wait { background: #FF9800; color: white; padding: 10px; margin-top: 10px; }
+.status-success { background: #4CAF50; color: white; padding: 10px; margin-top: 10px; }

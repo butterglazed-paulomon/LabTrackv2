@@ -1,183 +1,41 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LabTrack Borrow</title>
-  <link rel="stylesheet" href="borrowform.css">
-  <style>
-    /* Inline styles for specific logic elements */
-    .cart-container {
-      margin-top: 15px;
-      padding: 10px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 5px;
-      min-height: 50px;
-    }
-    .cart-item {
-      display: inline-block;
-      background: #2196F3;
-      color: white;
-      padding: 5px 10px;
-      margin: 4px;
-      border-radius: 15px;
-      font-size: 0.9em;
-      cursor: pointer;
-    }
-    .cart-item:hover {
-      background: #f44336; /* Red on hover to indicate delete */
-    }
-    .cart-item::after {
-      content: " ×";
-      font-weight: bold;
-    }
-    #status-msg {
-      margin-top: 15px;
-      padding: 10px;
-      border-radius: 5px;
-      text-align: center;
-      display: none;
-    }
-    .status-success { background: #4CAF50; color: white; }
-    .status-error { background: #f44336; color: white; }
-    .status-wait { background: #FF9800; color: white; animation: pulse 1.5s infinite; }
-    
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.7; }
-      100% { opacity: 1; }
-    }
-  </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="borrowform.css">
+    <title>CATS-LabTrack</title>
 </head>
 <body>
-
 <div class="container">
-  <h2>🧪 LabTrack Borrow</h2>
-
-  <label for="student">Student Email</label>
-  <input type="email" id="student" placeholder="student@university.edu" required>
-
-  <label for="prof">Professor Email</label>
-  <input type="email" id="prof" placeholder="prof@university.edu" required>
-
-  <label for="members">Group Members</label>
-  <textarea id="members" rows="2" placeholder="List names separated by commas..."></textarea>
-
-  <hr style="border: 0.5px solid #555; margin: 20px 0;">
-
-  <label>Add Items (Scan or Type ID)</label>
-  <div class="item-row">
-    <input type="text" id="itemInput" placeholder="PSA-XX-XXXX" onkeypress="handleEnter(event)">
-    <button onclick="addItem()">ADD</button>
-  </div>
-
-  <div id="cart" class="cart-container">
-    <span style="color: #aaa; font-style: italic; font-size: 0.9em;">No items added yet...</span>
-  </div>
-
-  <button id="submitBtn" class="flat-button" onclick="submitTransaction()">GENERATE & WRITE CARD</button>
-  
-  <div id="status-msg"></div>
-
-  <div class="footer">
-    <a href="/labstaff" style="color: #888; text-decoration: none;">Go to Staff Dashboard &rarr;</a>
-  </div>
+    <h2>CATS-LabTrack Borrow</h2>
+    <input type="email" id="student" placeholder="Student's Email">
+    <input type="email" id="prof" placeholder="Professor's Email">
+    <input type="text" id="items" placeholder="Item IDs (PSA-01, PSA-02...)">
+    
+    <button id="btn" onclick="submit()">GENERATE</button>
+    <div id="status"></div>
 </div>
-
 <script>
-  let cartItems = [];
-
-  function handleEnter(e) {
-    if (e.key === "Enter") addItem();
-  }
-
-  function addItem() {
-    const input = document.getElementById('itemInput');
-    const val = input.value.trim().toUpperCase();
-
-    if (!val) return;
-
-    if (cartItems.includes(val)) {
-      alert("Item already in list!");
-      return;
-    }
-
-    cartItems.push(val);
-    input.value = '';
-    renderCart();
-    input.focus();
-  }
-
-  function removeItem(item) {
-    cartItems = cartItems.filter(i => i !== item);
-    renderCart();
-  }
-
-  function renderCart() {
-    const container = document.getElementById('cart');
-    if (cartItems.length === 0) {
-      container.innerHTML = '<span style="color: #aaa; font-style: italic; font-size: 0.9em;">No items added yet...</span>';
-      return;
-    }
-    container.innerHTML = cartItems.map(item => 
-      `<span class="cart-item" onclick="removeItem('${item}')">${item}</span>`
-    ).join('');
-  }
-
-  function showStatus(msg, type) {
-    const el = document.getElementById('status-msg');
-    el.style.display = 'block';
-    el.className = ''; // reset classes
-    el.classList.add(type);
-    el.innerText = msg;
-  }
-
-  function submitTransaction() {
-    const student = document.getElementById('student').value;
-    const prof = document.getElementById('prof').value;
-    const members = document.getElementById('members').value;
-    const btn = document.getElementById('submitBtn');
-
-    if (!student || !prof || cartItems.length === 0) {
-      alert("Please fill in emails and add at least one item.");
-      return;
-    }
-
-    // Lock UI
-    btn.disabled = true;
-    btn.innerText = "Processing...";
-    showStatus("Sending to Google Backend...", "status-wait");
-
+function submit() {
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
     const payload = {
-      student_email: student,
-      prof_email: prof,
-      group_members: members,
-      items: cartItems.join(', ') // "PSA-01, PSA-02"
+        student_email: document.getElementById('student').value,
+        prof_email: document.getElementById('prof').value,
+        group_members: "N/A",
+        items: document.getElementById('items').value
     };
-
-    fetch('/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        showStatus(`✅ Success! NOW TAP CARD to write ID: ${data.uid}`, "status-wait");
-        btn.innerText = "WAITING FOR CARD TAP...";
-      } else {
-        showStatus("Error: " + (data.message || "Unknown error"), "status-error");
-        btn.disabled = false;
-        btn.innerText = "GENERATE & WRITE CARD";
-      }
-    })
-    .catch(err => {
-      showStatus("Network Error: " + err, "status-error");
-      btn.disabled = false;
-      btn.innerText = "GENERATE & WRITE CARD";
+    
+    btn.disabled = true; btn.innerText = "Processing...";
+    
+    fetch('/generate', { method: 'POST', body: JSON.stringify(payload) })
+    .then(r => r.json())
+    .then(d => {
+        if(d.success) {
+            document.body.innerHTML = "<div class='container'><h1>🍞</h1><h2>TAP CARD NOW</h2><p>Transaction: "+d.uid+"</p><button onclick='location.reload()'>Next</button></div>";
+        }
     });
-  }
+}
 </script>
-
 </body>
 </html>
