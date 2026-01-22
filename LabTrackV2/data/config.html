@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LabTrack Config</title>
+  <style>
+    body { font-family: sans-serif; background: #222; color: #fff; padding: 20px; }
+    .container { max-width: 500px; margin: 0 auto; background: #333; padding: 20px; border-radius: 8px; }
+    label { display: block; margin-top: 15px; font-weight: bold; color: #ccc; }
+    input { width: 100%; padding: 10px; margin-top: 5px; background: #444; border: 1px solid #555; color: white; box-sizing: border-box; }
+    button { width: 100%; padding: 12px; margin-top: 20px; background: #2196F3; color: white; border: none; font-weight: bold; cursor: pointer; }
+    button:hover { background: #1976D2; }
+    .footer { margin-top: 20px; text-align: center; font-size: 0.9em; }
+    a { color: #888; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>⚙️ System Configuration</h2>
+  
+  <label>WiFi SSID</label>
+  <input type="text" id="ssid" placeholder="Enter WiFi Name">
+
+  <label>WiFi Password</label>
+  <input type="password" id="password" placeholder="Enter WiFi Password">
+
+  <label>Backend URL (Google Script)</label>
+  <input type="text" id="flask_ip" placeholder="https://script.google.com/..." disabled style="opacity: 0.5; cursor: not-allowed;" title="Currently hardcoded in firmware for stability">
+  <small style="color:#888;">*URL is currently set in firmware.</small>
+
+  <button onclick="saveConfig()">SAVE & REBOOT</button>
+  <p id="status" style="text-align:center; margin-top:10px;"></p>
+
+  <div class="footer">
+    <a href="/">&larr; Back to Borrow Form</a> | <a href="/utility">Utility Tools</a>
+  </div>
+</div>
+
+<script>
+  // Load existing config on page load
+  window.onload = function() {
+    fetch('/config.json')
+      .then(res => res.json())
+      .then(data => {
+        if(data.flask_ip) document.getElementById('flask_ip').value = data.flask_ip;
+        // We generally don't send passwords back for security, but SSID might be blank if not connected
+      })
+      .catch(e => console.log(e));
+  };
+
+  function saveConfig() {
+    const btn = document.querySelector('button');
+    const status = document.getElementById('status');
+    btn.disabled = true;
+    btn.innerText = "Saving...";
+
+    const payload = {
+      ssid: document.getElementById('ssid').value,
+      password: document.getElementById('password').value,
+      flask_ip: document.getElementById('flask_ip').value
+    };
+
+    fetch('/save-config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.text())
+    .then(text => {
+      status.innerText = text;
+      if (text.includes("Rebooting")) {
+        btn.style.background = "#4CAF50";
+        btn.innerText = "Saved! Rebooting...";
+      }
+    })
+    .catch(err => {
+      status.innerText = "Error saving config";
+      btn.disabled = false;
+    });
+  }
+</script>
+
+</body>
+</html>

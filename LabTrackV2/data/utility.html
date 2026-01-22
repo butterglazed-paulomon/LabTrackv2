@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LabTrack Utility</title>
+  <style>
+    body { font-family: sans-serif; background: #222; color: #fff; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background: #333; padding: 20px; border-radius: 8px; }
+    h2 { border-bottom: 1px solid #555; padding-bottom: 10px; }
+    
+    .section { margin-bottom: 25px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 5px; }
+    h4 { margin-top: 0; color: #aaa; }
+    
+    button { padding: 10px 15px; margin-right: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
+    .btn-blue { background: #2196F3; }
+    .btn-green { background: #4CAF50; }
+    .btn-red { background: #f44336; }
+    button:hover { opacity: 0.9; transform: translateY(-1px); }
+    
+    pre { background: #111; padding: 10px; border-radius: 4px; overflow-x: auto; min-height: 40px; }
+    
+    .footer { margin-top: 20px; text-align: center; font-size: 0.9em; }
+    a { color: #888; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>🛠️ Utility & Debug</h2>
+
+  <div class="section">
+    <h4>Hardware Output Test</h4>
+    <button class="btn-blue" onclick="testHardware('test-led')">Test LEDs (RGB)</button>
+    <button class="btn-blue" onclick="testHardware('test-buzzer')">Test Buzzer</button>
+  </div>
+
+  <div class="section">
+    <h4>NFC Tag Operations</h4>
+    <p style="font-size:0.9em; color:#ccc;">Place card on reader before clicking.</p>
+    
+    <button class="btn-green" onclick="readTag()">Read Tag Data</button>
+    <button class="btn-red" onclick="wipeTag()">Wipe Tag (Reset)</button>
+    
+    <div style="margin-top: 15px;">
+      <label style="font-size:0.8em; color:#aaa;">Result:</label>
+      <pre id="output">Waiting for command...</pre>
+    </div>
+  </div>
+
+  <div class="footer">
+    <a href="/">&larr; Back to Borrow Form</a> | <a href="/config">Configuration</a>
+  </div>
+</div>
+
+<script>
+  function log(msg) {
+    document.getElementById('output').innerText = msg;
+  }
+
+  function testHardware(endpoint) {
+    log("Testing hardware...");
+    fetch('/utility/' + endpoint, { method: 'POST' })
+      .then(res => res.json())
+      .then(data => log(data.message))
+      .catch(err => log("Error: " + err));
+  }
+
+  function readTag() {
+    log("Reading... (Hold card steady)");
+    fetch('/utility/read', { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        log(data.content || "No tag detected or Read Failed");
+      })
+      .catch(err => log("Network Error"));
+  }
+
+  function wipeTag() {
+    if(!confirm("Are you sure you want to completely erase this tag?")) return;
+    
+    log("Wiping tag...");
+    fetch('/utility/wipe', { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        log(data.status);
+      })
+      .catch(err => log("Network Error"));
+  }
+</script>
+
+</body>
+</html>
