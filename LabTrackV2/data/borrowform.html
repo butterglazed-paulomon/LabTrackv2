@@ -1,41 +1,204 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
     <link rel="stylesheet" href="borrowform.css">
-    <title>CATS-LabTrack</title>
+    <title>LabTrack Borrow</title>
+    <style>
+        .input-group { display: flex; gap: 10px; }
+        .input-group input { margin-top: 0; }
+        .btn-add { width: auto; background: #4CAF50; margin-top: 0; padding: 0 15px; font-size: 1.2em; line-height: 1; }
+        
+        .tag-container { 
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; margin-bottom: 20px;
+            background: #333; padding: 10px; border-radius: 5px; min-height: 40px;
+        }
+        
+        .tag-item {
+            padding: 5px 10px; border-radius: 15px; font-size: 0.9em; 
+            display: flex; align-items: center; color: white;
+        }
+        
+        .tag-blue { background: #2196F3; } /* Items */
+        .tag-orange { background: #FF9800; } /* Members */
+        
+        .tag-item span { margin-right: 8px; }
+        .tag-item .remove { 
+            cursor: pointer; background: rgba(0,0,0,0.2); 
+            width: 20px; height: 20px; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; font-weight: bold;
+        }
+        .tag-item .remove:hover { background: #f44336; }
+        
+        .empty-msg { color: #777; font-style: italic; width: 100%; text-align: center; font-size: 0.9em; }
+    </style>
 </head>
 <body>
+
 <div class="container">
-    <h2>CATS-LabTrack Borrow</h2>
-    <input type="email" id="student" placeholder="Student's Email">
-    <input type="email" id="prof" placeholder="Professor's Email">
-    <input type="text" id="items" placeholder="Item IDs (PSA-01, PSA-02...)">
+    <h2>CATS-Labtrack Borrow</h2>
     
-    <button id="btn" onclick="submit()">GENERATE</button>
-    <div id="status"></div>
+    <div id="formSection">
+        <label>Student Email (Leader):</label>
+        <input type="email" id="student" placeholder="leader@miawan.edu.ph">
+        
+        <label>Professor Email:</label>
+        <input type="email" id="prof" placeholder="professor@miawan.edu.ph">
+        
+        <label>Group Members (Optional):</label>
+        <div class="input-group">
+            <input type="text" id="memberInput" placeholder="Enter Name" onkeypress="handleEnter(event, 'member')">
+            <button class="btn-add" onclick="addMember()">+</button>
+        </div>
+        <div id="memberList" class="tag-container">
+            <div class="empty-msg">No members added.</div>
+        </div>
+        
+        <label>Add Item ID:</label>
+        <div class="input-group">
+            <input type="text" id="itemInput" placeholder="e.g. PSA-01" onkeypress="handleEnter(event, 'item')">
+            <button class="btn-add" onclick="addItem()">+</button>
+        </div>
+        <div id="itemList" class="tag-container">
+            <div class="empty-msg">No items added.</div>
+        </div>
+
+        <button id="submitBtn" onclick="submitTransaction()">GENERATE & WRITE CARD</button>
+        <div id="status" class="status-wait" style="display:none;"></div>
+    </div>
+
+    <div id="successSection" style="display:none; text-align:center;">
+        <h1 style="font-size:4em; margin:0;">🍞</h1>
+        <h2>TAP CARD NOW</h2>
+        <p>Hold a BLANK card on the reader to write the transaction.</p>
+        
+        <div style="background:#333; padding:15px; border-radius:5px; margin:20px 0;">
+            <strong style="color:#aaa;">Transaction ID:</strong><br>
+            <span id="txDisplay" style="font-size:1.5em; font-weight:bold; color:#4CAF50;">...</span>
+        </div>
+
+        <button onclick="location.reload()" style="background:#555;">START NEW TRANSACTION</button>
+    </div>
 </div>
+
 <script>
-function submit() {
-    const btn = document.getElementById('btn');
+let items = [];
+let members = [];
+
+function handleEnter(e, type) {
+    if(e.key === 'Enter') {
+        if(type === 'item') addItem();
+        if(type === 'member') addMember();
+    }
+}
+
+// --- ITEM LOGIC ---
+function addItem() {
+    const input = document.getElementById('itemInput');
+    const val = input.value.trim().toUpperCase();
+    if(!val) return;
+    if(items.includes(val)) { alert("Item already in list!"); return; }
+    
+    items.push(val);
+    input.value = "";
+    renderList('itemList', items, 'tag-blue', 'removeItem');
+    input.focus();
+}
+function removeItem(index) {
+    items.splice(index, 1);
+    renderList('itemList', items, 'tag-blue', 'removeItem');
+}
+
+// --- MEMBER LOGIC ---
+function addMember() {
+    const input = document.getElementById('memberInput');
+    const val = input.value.trim();
+    if(!val) return;
+    if(members.includes(val)) { alert("Member already added!"); return; }
+    
+    members.push(val);
+    input.value = "";
+    renderList('memberList', members, 'tag-orange', 'removeMember');
+    input.focus();
+}
+function removeMember(index) {
+    members.splice(index, 1);
+    renderList('memberList', members, 'tag-orange', 'removeMember');
+}
+
+// --- RENDERER ---
+function renderList(containerId, dataArray, colorClass, removeFunc) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = "";
+    
+    if(dataArray.length === 0) {
+        container.innerHTML = `<div class="empty-msg">None added.</div>`;
+        return;
+    }
+    
+    dataArray.forEach((txt, index) => {
+        const div = document.createElement('div');
+        div.className = `tag-item ${colorClass}`;
+        div.innerHTML = `
+            <span>${txt}</span>
+            <div class="remove" onclick="${removeFunc}(${index})">&times;</div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// --- SUBMIT ---
+function submitTransaction() {
+    const student = document.getElementById('student').value;
+    const prof = document.getElementById('prof').value;
+    const btn = document.getElementById('submitBtn');
     const status = document.getElementById('status');
+
+    if(!student || items.length === 0) {
+        alert("Please enter Leader Email and at least one Item.");
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Processing...";
+    status.style.display = 'block';
+    status.innerText = "Connecting to System...";
+
+    // Format Lists as Strings
+    const itemsString = items.join(', ');
+    const membersString = members.length > 0 ? members.join(', ') : "Individual";
+
     const payload = {
-        student_email: document.getElementById('student').value,
-        prof_email: document.getElementById('prof').value,
-        group_members: "N/A",
-        items: document.getElementById('items').value
+        student_email: student,
+        prof_email: prof,
+        group_members: membersString,
+        items: itemsString
     };
-    
-    btn.disabled = true; btn.innerText = "Processing...";
-    
-    fetch('/generate', { method: 'POST', body: JSON.stringify(payload) })
-    .then(r => r.json())
-    .then(d => {
-        if(d.success) {
-            document.body.innerHTML = "<div class='container'><h1>🍞</h1><h2>TAP CARD NOW</h2><p>Transaction: "+d.uid+"</p><button onclick='location.reload()'>Next</button></div>";
+
+    fetch('/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('formSection').style.display = 'none';
+            document.getElementById('successSection').style.display = 'block';
+            document.getElementById('txDisplay').innerText = data.uid;
+        } else {
+            alert("Error: System refused transaction.");
+            location.reload();
         }
+    })
+    .catch(err => {
+        alert("Connection Failed. Check ESP32.");
+        console.error(err);
+        btn.disabled = false;
+        btn.innerText = "GENERATE & WRITE CARD";
     });
 }
 </script>
+
 </body>
 </html>

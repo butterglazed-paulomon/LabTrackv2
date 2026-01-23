@@ -1,109 +1,147 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
     <link rel="stylesheet" href="borrowform.css">
     <title>Staff Dashboard</title>
+    <style>
+        .item-row { background: #444; padding: 10px; margin: 5px 0; display: flex; align-items: center; }
+        .item-row input { width: auto; margin-right: 10px; transform: scale(1.5); }
+        .item-row label { flex-grow: 1; font-size: 1.1em; }
+        .btn-scan { background: #2196F3; font-size: 1.2em; padding: 15px; width: 100%; margin-top: 20px; }
+    </style>
 </head>
 <body>
 <div class="container">
-    <h2>CATS-Labtrack Labmin Dashboard</h2>
+    <h2>CATS Labmin Return Dashboard</h2>
     
-    <div id="scanPanel" style="border: 2px dashed #555; padding: 40px; text-align: center;">
-        <h1 style="font-size: 3em;">📡</h1>
-        <p>Scanning for Card...</p>
+    <div id="scanPanel" style="padding: 20px; text-align: center; border: 2px dashed #555;">
+        <h1 style="font-size: 4em; margin: 0;">🍞</h1>
+        <p id="statusText">Ready to Scan</p>
+        <button class="btn-scan" onclick="manualScan()">SCAN CARD</button>
     </div>
     
-    <div id="detailsPanel" style="display:none; text-align: left;">
+    <div id="detailsPanel" style="display:none;">
         <h3>Transaction Found</h3>
-        <div style="background:#444; padding:10px; border-radius:5px; margin-bottom:10px;">
-            <strong style="color:#aaa;">ID:</strong> <span id="txID">...</span><br>
-            <strong style="color:#aaa;">Student:</strong> <span id="stEmail">Loading...</span><br>
-            <strong style="color:#aaa;">Items:</strong>
-            <ul id="itemsList" style="padding-left: 20px; margin: 5px 0;"></ul>
+        <div style="margin-bottom:15px; background: #333; padding: 10px; border-radius: 5px;">
+            <strong>Student:</strong> <span id="stEmail">...</span><br>
+            <span style="font-size:0.8em; color:#aaa;" id="txID"></span>
         </div>
-        
-        <label>Inspection Result:</label>
-        <select id="condition" style="width:100%; padding:10px; margin-bottom:20px;">
-            <option value="Good">✅ All Items Good</option>
-            <option value="Damaged">⚠️ Damaged / Missing</option>
-        </select>
 
-        <button onclick="finalize()" style="background:#4CAF50;">CONFIRM RETURN & WIPE</button>
-        <button onclick="location.reload()" style="background:#555; margin-top:10px;">CANCEL</button>
+        <p>Uncheck items that are <strong>MISSING/DAMAGED</strong>:</p>
+        <div id="checklist"></div>
+
+        <button onclick="processReturn()" style="background:#4CAF50; margin-top:20px;">CONFIRM RETURN</button>
+        <button onclick="location.reload()" style="background:#777; margin-top:10px;">CANCEL</button>
     </div>
 </div>
 
 <script>
-let polling = true;
+// Replace with YOUR Google Script URL
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw3LLcA5mpJ40OX8VhsnDPoDDoHdv4DnFk_Y6-A2llTfQdowBeteFuDrQMAdXXt-09R/exec";
 
-// 1. POLLING LOOP
-setInterval(() => {
-    if(!polling) return; // Stop asking if we found something
+function manualScan() {
+    const btn = document.querySelector('.btn-scan');
+    const status = document.getElementById('statusText');
+    
+    btn.disabled = true;
+    btn.innerText = "Scanning...";
+    status.innerText = "Hold card near reader...";
 
-    fetch('/utility/read', { method: 'POST' })
+    // 1. Ask ESP32 for Card ID
+    fetch('/utility/read', {method:'POST'})
     .then(r => r.json())
-    .then(data => {
-        // If we get a valid TX ID (length > 3 and starts with TX)
-        if(data.content && data.content.startsWith("TX-")) {
-            polling = false; // Stop scanning
-            loadTransaction(data.content);
+    .then(d => {
+        if(d.content && d.content.startsWith("CATS-")) {
+            loadTx(d.content);
+        } else {
+            // Failure or empty
+            alert("No Transaction Card Found. Try again.");
+            resetScanBtn();
         }
     })
-    .catch(e => console.log("Waiting..."));
-}, 1000); // Check every 1 second
-
-// 2. LOAD FROM GOOGLE
-function loadTransaction(uid) {
-    document.getElementById('scanPanel').style.display = 'none';
-    document.getElementById('detailsPanel').style.display = 'block';
-    document.getElementById('txID').innerText = uid;
-    
-    // Call Google Script to get details
-    const scriptURL = "https://script.google.com/macros/s/AKfycbw3LLcA5mpJ40OX8VhsnDPoDDoHdv4DnFk_Y6-A2llTfQdowBeteFuDrQMAdXXt-09R/exec"; // CHECK THIS URL
-    
-    fetch(scriptURL + "?action=get_transaction&uid=" + uid)
-    .then(r => r.json())
-    .then(data => {
-        if(data.status === 'not_found') {
-            alert("Transaction not found in Database!");
-            location.reload();
-        } else {
-            document.getElementById('stEmail').innerText = data.student;
-            const ul = document.getElementById('itemsList');
-            ul.innerHTML = "";
-            // Handle comma separated items
-            data.items.split(',').forEach(item => {
-                let li = document.createElement("li");
-                li.innerText = item.trim();
-                ul.appendChild(li);
-            });
-        }
+    .catch(e => {
+        alert("Connection Error. Check ESP32.");
+        resetScanBtn();
     });
 }
 
-// 3. FINALIZE RETURN
-function finalize() {
-    const uid = document.getElementById('txID').innerText;
-    const cond = document.getElementById('condition').value;
-    
-    // Update UI
-    const btn = document.querySelector('button');
-    btn.disabled = true; 
-    btn.innerText = "Processing & Wiping...";
+function resetScanBtn() {
+    const btn = document.querySelector('.btn-scan');
+    const status = document.getElementById('statusText');
+    btn.disabled = false;
+    btn.innerText = "SCAN CARD";
+    status.innerText = "Ready to Scan";
+}
 
-    // Send to ESP32
-    fetch('/return/finalize', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            uid: uid,
-            item_statuses: [{id: "ALL", status: cond}] // Simplified logic
-        })
-    })
+// 2. Load Data from Google
+function loadTx(uid) {
+    document.getElementById('statusText').innerText = "Fetching Data...";
+    
+    fetch(SCRIPT_URL + "?action=get_transaction&uid=" + uid)
     .then(r => r.json())
     .then(d => {
-        alert("Return Complete! Please hold card to wipe.");
+        if(d.status != 'found') { 
+            alert("Transaction ID found on card, but not in Database!"); 
+            resetScanBtn(); 
+            return; 
+        }
+        
+        // Switch Views
+        document.getElementById('scanPanel').style.display = 'none';
+        document.getElementById('detailsPanel').style.display = 'block';
+        
+        // Fill Data
+        document.getElementById('txID').innerText = uid;
+        document.getElementById('stEmail').innerText = d.student;
+        
+        const list = document.getElementById('checklist');
+        list.innerHTML = "";
+        
+        // Create Checkboxes
+        d.items.split(',').forEach(item => {
+            let div = document.createElement('div');
+            div.className = 'item-row';
+            // Checked by default = Returning Good
+            div.innerHTML = `<input type="checkbox" checked value="${item.trim()}"><label>${item.trim()}</label>`;
+            list.appendChild(div);
+        });
+    })
+    .catch(e => {
+        alert("Google Database Error.");
+        resetScanBtn();
+    });
+}
+
+// 3. Process Return
+function processReturn() {
+    const uid = document.getElementById('txID').innerText;
+    const checkboxes = document.querySelectorAll('#checklist input');
+    
+    let returned = [];
+    let remaining = [];
+    
+    checkboxes.forEach(cb => {
+        if(cb.checked) returned.push(cb.value);
+        else remaining.push(cb.value);
+    });
+
+    const btn = document.querySelector('button'); // The confirm button
+    btn.disabled = true; btn.innerText = "Syncing...";
+
+    fetch('/return/finalize', {
+        method: 'POST',
+        body: JSON.stringify({
+            uid: uid,
+            returned_items: returned,
+            remaining_items: remaining
+        })
+    }).then(r => r.json()).then(d => {
+        if(remaining.length > 0) {
+            alert("Partial Return Saved.\nCard NOT wiped (items remain).");
+        } else {
+            alert("All Items Returned.\nHOLD CARD TO WIPE.");
+        }
         location.reload();
     });
 }

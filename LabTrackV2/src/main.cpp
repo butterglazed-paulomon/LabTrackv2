@@ -40,10 +40,10 @@ void beep(int qty, int duration) {
 }
 
 // --- NFC PRIMITIVES ---
-// Returns content string, or "" if empty/fail
+
+// 1. Read Card
 String readCardData() {
   uint8_t uid[7], uidLen;
-  // Fast timeout (100ms) for polling
   if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 100)) {
      uint8_t key[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
      if (nfc.mifareclassic_AuthenticateBlock(uid, uidLen, 4, 0, key)) {
@@ -58,6 +58,7 @@ String readCardData() {
   return "";
 }
 
+// 2. Write Card
 bool writeCardData(String text) {
   uint8_t uid[7], uidLen;
   if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 500)) {
@@ -65,6 +66,19 @@ bool writeCardData(String text) {
      if (nfc.mifareclassic_AuthenticateBlock(uid, uidLen, 4, 0, key)) {
         uint8_t data[16] = {0};
         for(int i=0; i<text.length() && i<16; i++) data[i] = text[i];
+        return nfc.mifareclassic_WriteDataBlock(4, data);
+     }
+  }
+  return false;
+}
+
+// 3. Wipe Card (ADDED THIS BACK)
+bool wipeCard() {
+  uint8_t uid[7], uidLen;
+  if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 500)) {
+     uint8_t key[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+     if (nfc.mifareclassic_AuthenticateBlock(uid, uidLen, 4, 0, key)) {
+        uint8_t data[16] = {0}; // All zeros
         return nfc.mifareclassic_WriteDataBlock(4, data);
      }
   }
@@ -121,7 +135,7 @@ void setup() {
     WiFi.mode(WIFI_STA); WiFi.begin(ssid.c_str(), pass.c_str());
     unsigned long start = millis();
     while(WiFi.status() != WL_CONNECTED && millis()-start < 15000) delay(500);
-    if(WiFi.status() == WL_CONNECTED) MDNS.begin("labtrack");
+    if(WiFi.status() == WL_CONNECTED) MDNS.begin("catslabtrack");
     else WiFi.softAP(AP_SSID, AP_PASS);
   }
 
@@ -132,71 +146,63 @@ void setup() {
   server.serveStatic("/utility", LittleFS, "/utility.html");
   server.serveStatic("/borrowform.css", LittleFS, "/borrowform.css");
 
-  // 1. GENERATE & WRITE (With Overwrite Protection)
+  // 1. GENERATE & WRITE
   server.on("/generate", HTTP_POST, []() {
       if(!server.hasArg("plain")) return server.send(400, "text/plain", "Bad Request");
-      String txID = "TX-" + String(random(1000, 9999));
+      String txID = "CATS-" + String(random(1000, 9999));
       
-      // Reply first so UI updates
       server.send(200, "application/json", "{\"success\":true, \"uid\":\""+txID+"\"}");
       
       Serial.println("Waiting for card...");
       unsigned long start = millis();
       bool success = false;
-      int errorReason = 0; // 0=Timeout, 1=NotEmpty
+      int errorReason = 0;
 
-      // Loop for 20 seconds
       while(millis() - start < 20000) {
           digitalWrite(RED_LED_PIN, HIGH); delay(100); digitalWrite(RED_LED_PIN, LOW);
           
-          // A. Read First
           String existing = readCardData();
-          
-          // B. Check Logic
           if (existing.length() > 0 && existing != "0000000000000000") {
-             // Card is NOT empty. Do not write.
-             // Beep aggressively to warn user
-             beep(2, 50); 
-             errorReason = 1;
-             delay(1000); // Wait for them to remove it
-             continue; 
+             beep(2, 50); errorReason = 1; delay(1000); continue; 
           }
-          
-          // C. If Empty (or we just treat blank string as empty), Write
-          // Note: readCardData returns "" if read fails OR if blank (depending on implementation).
-          // Ideally, we explicitly check for 0s. Assuming "" means unreadable or empty for now.
-          if(writeCardData(txID)) { 
-             success = true; break; 
-          }
+          if(writeCardData(txID)) { success = true; break; }
       }
 
       if(success) {
           beep(1, 200); digitalWrite(GREEN_LED_PIN, HIGH); delay(500); digitalWrite(GREEN_LED_PIN, LOW);
           sendToGoogle(txID, "borrow", server.arg("plain"));
       } else {
-          beep(3, 100); // Error Beep
+          beep(3, 100); 
           if(errorReason == 1) Serial.println("Error: Card not empty");
       }
   });
 
-  // 2. FINALIZE (Return & Wipe)
+  // 2. FINALIZE (Return & Wipe/Keep)
   server.on("/return/finalize", HTTP_POST, []() {
-      StaticJsonDocument<512> doc; deserializeJson(doc, server.arg("plain"));
+      StaticJsonDocument<1024> doc; 
+      deserializeJson(doc, server.arg("plain"));
       String uid = doc["uid"].as<String>();
-      server.send(200, "application/json", "{\"success\":true}");
+      JsonArray remaining = doc["remaining_items"];
+      bool fullReturn = (remaining.size() == 0);
       
+      server.send(200, "application/json", "{\"success\":true}");
       sendToGoogle(uid, "return_inspection", server.arg("plain"));
       
-      // Wipe Loop (10s)
-      unsigned long start = millis();
-      while(millis() - start < 10000) {
-          digitalWrite(RED_LED_PIN, HIGH); delay(100); digitalWrite(RED_LED_PIN, LOW);
-          // Write Zeros
-          if(writeCardData("")) { beep(3, 50); break; }
+      if (fullReturn) {
+          Serial.println("[INFO] Full Return -> Wiping...");
+          unsigned long start = millis();
+          while(millis() - start < 10000) {
+              digitalWrite(RED_LED_PIN, HIGH); delay(100); digitalWrite(RED_LED_PIN, LOW);
+              if(wipeCard()) { beep(3, 50); break; }
+          }
+      } else {
+          Serial.println("[INFO] Partial Return -> Keeping Card");
+          beep(1, 500); 
+          digitalWrite(GREEN_LED_PIN, HIGH); delay(1000); digitalWrite(GREEN_LED_PIN, LOW);
       }
   });
 
-  // 3. UTILITY - TEST LEDS (Fixed JSON Error)
+  // 3. UTILITIES
   server.on("/utility/test-led", HTTP_POST, []() {
       digitalWrite(RED_LED_PIN, HIGH); delay(200); digitalWrite(RED_LED_PIN, LOW);
       digitalWrite(GREEN_LED_PIN, HIGH); delay(200); digitalWrite(GREEN_LED_PIN, LOW);
@@ -204,17 +210,19 @@ void setup() {
       server.send(200, "application/json", "{\"message\":\"LEDs Tested\"}");
   });
 
-  // 4. UTILITY - TEST BUZZER
   server.on("/utility/test-buzzer", HTTP_POST, []() {
       beep(2, 100);
       server.send(200, "application/json", "{\"message\":\"Buzzer Tested\"}");
   });
 
-  // 5. UTILITY - READ (Used by LabStaff)
   server.on("/utility/read", HTTP_POST, []() {
       String c = readCardData();
-      // Always return valid JSON, even if empty
       server.send(200, "application/json", "{\"content\":\""+c+"\"}");
+  });
+
+  server.on("/utility/wipe", HTTP_POST, []() { // Added explicit utility wipe
+      if(wipeCard()) server.send(200, "application/json", "{\"status\":\"Wiped\"}");
+      else server.send(500, "application/json", "{\"status\":\"Failed\"}");
   });
 
   server.on("/save-config", HTTP_POST, []() {
